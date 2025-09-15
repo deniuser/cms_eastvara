@@ -1,6 +1,6 @@
 const express = require('express');
 const cors = require('cors');
-const { RouterOSAPI } = require('node-routeros');
+const RouterOSAPI = require('routeros-api');
 const path = require('path');
 
 const app = express();
