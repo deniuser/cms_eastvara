@@ -54,9 +54,86 @@ const Settings: React.FC = () => {
 
   // Load MikroTik config on component mount
   React.useEffect(() => {
-    const hasConfig = mikrotikManager.loadConfig();
-    if (hasConfig) {
-      // Config loaded, check if still connected
+    // Load saved MikroTik configuration
+    const savedConfig = localStorage.getItem('mikrotik_config');
+    if (savedConfig) {
+      try {
+        const config = JSON.parse(savedConfig);
+        setSettings(prev => ({
+          ...prev,
+          mikrotikHost: config.host || '',
+          mikrotikUsername: config.username || '',
+          mikrotikPassword: config.password || '',
+          mikrotikPort: config.port || 8728
+        }));
+        
+        // Check if still connected
+        setMikrotikStatus({
+          connected: mikrotikManager.isConnected(),
+          method: mikrotikManager.getCurrentMethod() || undefined
+        });
+      } catch (error) {
+        console.error('Error loading MikroTik config:', error);
+      }
+    }
+    
+    // Load other settings from localStorage
+    const savedSettings = localStorage.getItem('app_settings');
+    if (savedSettings) {
+      try {
+        const appSettings = JSON.parse(savedSettings);
+        setSettings(prev => ({
+          ...prev,
+          ...appSettings,
+          // Keep MikroTik settings from above
+          mikrotikHost: prev.mikrotikHost,
+          mikrotikUsername: prev.mikrotikUsername,
+          mikrotikPassword: prev.mikrotikPassword,
+          mikrotikPort: prev.mikrotikPort
+        }));
+      } catch (error) {
+        console.error('Error loading app settings:', error);
+      }
+    }
+  }, []);
+
+  // Save settings to localStorage whenever they change
+  React.useEffect(() => {
+    const settingsToSave = {
+      networkName: settings.networkName,
+      networkPassword: settings.networkPassword,
+      dhcpPool: settings.dhcpPool,
+      dnsServer: settings.dnsServer,
+      sessionTimeout: settings.sessionTimeout,
+      maxConnections: settings.maxConnections,
+      bandwidthLimit: settings.bandwidthLimit,
+      emailNotifications: settings.emailNotifications,
+      alertThreshold: settings.alertThreshold,
+      dailyReport: settings.dailyReport,
+      backupInterval: settings.backupInterval,
+      logRetention: settings.logRetention,
+      autoUpdate: settings.autoUpdate
+    };
+    localStorage.setItem('app_settings', JSON.stringify(settingsToSave));
+  }, [settings]);
+
+  // Save MikroTik settings separately
+  React.useEffect(() => {
+    if (settings.mikrotikHost || settings.mikrotikUsername) {
+      const mikrotikConfig = {
+        host: settings.mikrotikHost,
+        username: settings.mikrotikUsername,
+        password: settings.mikrotikPassword,
+        port: settings.mikrotikPort,
+        useHttps: false
+      };
+      localStorage.setItem('mikrotik_config', JSON.stringify(mikrotikConfig));
+    }
+  }, [settings.mikrotikHost, settings.mikrotikUsername, settings.mikrotikPassword, settings.mikrotikPort]);
+
+  // Check connection status on mount
+  React.useEffect(() => {
+    if (mikrotikManager.isConnected()) {
       setMikrotikStatus({
         connected: mikrotikManager.isConnected(),
         method: mikrotikManager.getCurrentMethod() || undefined
@@ -83,18 +160,11 @@ const Settings: React.FC = () => {
       
       if (result.success) {
         mikrotikManager.saveConfig();
-      setSettings(prev => ({
-        ...prev,
-          mikrotikHost: settings.mikrotikHost,
-          mikrotikUsername: settings.mikrotikUsername,
-          mikrotikPassword: settings.mikrotikPassword,
-          mikrotikPort: settings.mikrotikPort
-      }));
-      setMikrotikStatus({
+        setMikrotikStatus({
           connected: true,
           method: result.method,
           systemInfo: result.systemInfo
-      });
+        });
       } else {
         setMikrotikStatus({
           connected: false,
@@ -113,10 +183,10 @@ const Settings: React.FC = () => {
   const handleSave = async () => {
     setSaving(true);
     try {
-      // Mock save operation
+      // Save all settings to localStorage
       await new Promise(resolve => setTimeout(resolve, 1000));
-      // In real implementation, this would save to backend
-      console.log('Settings saved:', settings);
+      
+      // Settings are automatically saved via useEffect hooks above
       alert('Settings saved successfully!');
     } catch (error) {
       console.error('Error saving settings:', error);
