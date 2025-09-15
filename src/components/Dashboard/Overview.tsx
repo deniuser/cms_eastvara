@@ -23,11 +23,22 @@ const Overview: React.FC = () => {
   useEffect(() => {
     const loadData = async () => {
       try {
-        const [usersData, deviceData, alertsData] = await Promise.all([
-          api.getUsers(),
-          api.getDeviceInfo(),
-          api.getAlerts()
-        ]);
+        let usersData, deviceData;
+        
+        try {
+          // Try to get real data from MikroTik
+          [usersData, deviceData] = await Promise.all([
+            api.getActiveHotspotUsers(),
+            api.getDeviceInfo()
+          ]);
+        } catch (mikrotikError) {
+          // Fallback to stored data if MikroTik is not connected
+          console.warn('MikroTik not connected, using stored data:', mikrotikError);
+          usersData = await api.getUsers();
+          deviceData = null;
+        }
+        
+        const alertsData = await api.getAlerts();
         
         setUsers(usersData);
         setDeviceInfo(deviceData);

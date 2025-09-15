@@ -26,7 +26,15 @@ const UserSessions: React.FC = () => {
   useEffect(() => {
     const loadUsers = async () => {
       try {
-        const usersData = await api.getUsers();
+        // Try to get real active users from MikroTik first
+        let usersData: User[] = [];
+        try {
+          usersData = await api.getActiveHotspotUsers();
+        } catch (mikrotikError) {
+          // Fallback to stored users if MikroTik is not connected
+          console.warn('MikroTik not connected, using stored users:', mikrotikError);
+          usersData = await api.getUsers();
+        }
         setUsers(usersData);
         setFilteredUsers(usersData);
       } catch (error) {
@@ -78,11 +86,26 @@ const UserSessions: React.FC = () => {
 
   const handleDisconnectUser = async (userId: string) => {
     try {
-      await api.disconnectUser(userId);
-      const updatedUsers = await api.getUsers();
+      // Try to disconnect from MikroTik first
+      try {
+        await api.disconnectHotspotUser(userId);
+      } catch (mikrotikError) {
+        // Fallback to local disconnect if MikroTik is not available
+        console.warn('MikroTik disconnect failed, using local disconnect:', mikrotikError);
+        await api.disconnectUser(userId);
+      }
+      
+      // Reload users
+      let updatedUsers: User[] = [];
+      try {
+        updatedUsers = await api.getActiveHotspotUsers();
+      } catch (mikrotikError) {
+        updatedUsers = await api.getUsers();
+      }
       setUsers(updatedUsers);
     } catch (error) {
       console.error('Error disconnecting user:', error);
+      alert('Failed to disconnect user. Please check your MikroTik connection.');
     }
   };
 

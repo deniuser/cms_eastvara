@@ -11,13 +11,14 @@ import {
   XCircle,
   AlertCircle
 } from 'lucide-react';
-import { mikrotikAPI, MikroTikConfig } from '../../utils/mikrotik';
+import { mikrotikManager } from '../../utils/mikrotik-api';
 
 const Settings: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [mikrotikTesting, setMikrotikTesting] = useState(false);
   const [mikrotikStatus, setMikrotikStatus] = useState<{
     connected: boolean;
+    method?: string;
     error?: string;
     systemInfo?: any;
   } | null>(null);
@@ -53,22 +54,12 @@ const Settings: React.FC = () => {
 
   // Load MikroTik config on component mount
   React.useEffect(() => {
-    const config = mikrotikAPI.loadConfig();
-    if (config) {
-      setSettings(prev => ({
-        ...prev,
-        mikrotikHost: config.host,
-        mikrotikUsername: config.username,
-        mikrotikPassword: config.password,
-        mikrotikPort: config.port || 8728
-      }));
-      
-      // Check current connection status
-      const status = mikrotikAPI.getConnectionStatus();
+    const hasConfig = mikrotikManager.loadConfig();
+    if (hasConfig) {
+      // Config loaded, check if still connected
       setMikrotikStatus({
-        connected: status.isConnected,
-        error: status.lastError,
-        systemInfo: status.systemInfo
+        connected: mikrotikManager.isConnected(),
+        method: mikrotikManager.getCurrentMethod() || undefined
       });
     }
   }, []);
@@ -81,22 +72,29 @@ const Settings: React.FC = () => {
     setMikrotikTesting(true);
     setMikrotikStatus(null);
     
-    const config: MikroTikConfig = {
-      host: settings.mikrotikHost,
-      username: settings.mikrotikUsername,
-      password: settings.mikrotikPassword,
-      port: settings.mikrotikPort
-    };
-    
     try {
-      const result = await mikrotikAPI.testConnection(config);
+      const result = await mikrotikManager.connect(
+        settings.mikrotikHost,
+        settings.mikrotikUsername,
+        settings.mikrotikPassword,
+        settings.mikrotikPort,
+        false // useHttps - can be made configurable
+      );
       
       if (result.success) {
-        mikrotikAPI.setConfig(config);
-        setMikrotikStatus({
+        mikrotikManager.saveConfig();
+      setSettings(prev => ({
+        ...prev,
+          mikrotikHost: settings.mikrotikHost,
+          mikrotikUsername: settings.mikrotikUsername,
+          mikrotikPassword: settings.mikrotikPassword,
+          mikrotikPort: settings.mikrotikPort
+      }));
+      setMikrotikStatus({
           connected: true,
+          method: result.method,
           systemInfo: result.systemInfo
-        });
+      });
       } else {
         setMikrotikStatus({
           connected: false,
@@ -354,10 +352,12 @@ const Settings: React.FC = () => {
               <>
                 <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
                 <div>
-                  <p className="text-green-800 font-medium">Connected Successfully</p>
+                  <p className="text-green-800 font-medium">
+                    Connected Successfully {mikrotikStatus.method && `(${mikrotikStatus.method})`}
+                  </p>
                   {mikrotikStatus.systemInfo && (
                     <p className="text-green-600 text-sm">
-                      {mikrotikStatus.systemInfo.identity} - RouterOS {mikrotikStatus.systemInfo.version}
+                      {mikrotikStatus.systemInfo.identity || mikrotikStatus.systemInfo['board-name']} - RouterOS {mikrotikStatus.systemInfo.version}
                     </p>
                   )}
                 </div>
@@ -456,7 +456,7 @@ const Settings: React.FC = () => {
             <div className="grid grid-cols-2 gap-4 text-sm">
               <div>
                 <span className="text-gray-600">Identity:</span>
-                <span className="ml-2 font-medium">{mikrotikStatus.systemInfo.identity}</span>
+                <span className="ml-2 font-medium">{mikrotikStatus.systemInfo.identity || mikrotikStatus.systemInfo['board-name']}</span>
               </div>
               <div>
                 <span className="text-gray-600">Version:</span>
@@ -468,15 +468,15 @@ const Settings: React.FC = () => {
               </div>
               <div>
                 <span className="text-gray-600">CPU Load:</span>
-                <span className="ml-2 font-medium">{mikrotikStatus.systemInfo.cpuLoad}%</span>
+                <span className="ml-2 font-medium">{mikrotikStatus.systemInfo['cpu-load'] || 0}%</span>
               </div>
               <div>
                 <span className="text-gray-600">Free Memory:</span>
-                <span className="ml-2 font-medium">{mikrotikStatus.systemInfo.freeMemory} MB</span>
+                <span className="ml-2 font-medium">{Math.round((mikrotikStatus.systemInfo['free-memory'] || 0) / 1024 / 1024)} MB</span>
               </div>
               <div>
                 <span className="text-gray-600">Total Memory:</span>
-                <span className="ml-2 font-medium">{mikrotikStatus.systemInfo.totalMemory} MB</span>
+                <span className="ml-2 font-medium">{Math.round((mikrotikStatus.systemInfo['total-memory'] || 0) / 1024 / 1024)} MB</span>
               </div>
             </div>
           </div>
@@ -489,10 +489,13 @@ const Settings: React.FC = () => {
             <div>
               <h4 className="font-medium text-blue-800 mb-1">Setup Instructions</h4>
               <div className="text-blue-700 text-sm space-y-1">
-                <p>1. Enable API service on your MikroTik router: <code className="bg-blue-100 px-1 rounded">/ip service enable api</code></p>
-                <p>2. Create an API user with appropriate permissions</p>
-                <p>3. Ensure the router is accessible from this network</p>
-                <p>4. Default API port is 8728 (unencrypted) or 8729 (SSL)</p>
+                <p><strong>Option 1: WebSocket API (Recommended)</strong></p>
+                <p>1. Enable WebSocket service: <code className="bg-blue-100 px-1 rounded">/ip service enable www</code></p>
+                <p>2. Enable API: <code className="bg-blue-100 px-1 rounded">/ip service enable api</code></p>
+                <p><strong>Option 2: HTTP REST API</strong></p>
+                <p>1. Enable REST API: <code className="bg-blue-100 px-1 rounded">/ip service enable www</code></p>
+                <p>2. Create API user with full permissions</p>
+                <p>3. Ensure router is accessible from this network</p>
               </div>
             </div>
           </div>

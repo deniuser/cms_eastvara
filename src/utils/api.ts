@@ -1,5 +1,5 @@
 import { User, AdminUser, PortalDesign, DeviceInfo, NetworkInterface, TrafficLog, Alert } from '../types';
-import { mikrotikAPI } from './mikrotik';
+import { mikrotikManager } from './mikrotik-api';
 
 // Mock data storage using localStorage
 const STORAGE_KEYS = {
@@ -361,33 +361,28 @@ export const api = {
   // Device management
   async getDeviceInfo(): Promise<DeviceInfo> {
     try {
-      // Try to get real data from MikroTik if connected
-      const mikrotikStatus = mikrotikAPI.getConnectionStatus();
-      if (mikrotikStatus.isConnected) {
-        const systemResources = await mikrotikAPI.getSystemResources();
+      // Get real data from MikroTik if connected
+      if (mikrotikManager.isConnected()) {
+        const systemResources = await mikrotikManager.getSystemResource();
         return {
           id: '1',
-          name: mikrotikStatus.systemInfo?.identity || 'MikroTik Router',
-          model: systemResources.boardName || 'Unknown',
+          name: systemResources.identity || systemResources['board-name'] || 'MikroTik Router',
+          model: systemResources['board-name'] || systemResources.platform || 'Unknown',
           routerOSVersion: systemResources.version || 'Unknown',
-          uptime: systemResources.uptime ? this.parseUptimeToSeconds(systemResources.uptime) : 0,
-          cpuUsage: systemResources.cpuLoad || 0,
-          memoryUsage: systemResources.totalMemory ? 
-            Math.round(((systemResources.totalMemory - systemResources.freeMemory) / systemResources.totalMemory) * 100) : 0,
+          uptime: this.parseUptimeToSeconds(systemResources.uptime || '0s'),
+          cpuUsage: parseInt(systemResources['cpu-load']) || 0,
+          memoryUsage: systemResources['total-memory'] ? 
+            Math.round(((systemResources['total-memory'] - systemResources['free-memory']) / systemResources['total-memory']) * 100) : 0,
           lastUpdated: new Date(),
           status: 'online' as const
         };
       }
     } catch (error) {
-      console.warn('Failed to get MikroTik data, using mock data:', error);
+      console.error('Failed to get MikroTik device info:', error);
     }
     
-    // Fallback to mock data
-    const device = JSON.parse(localStorage.getItem(STORAGE_KEYS.DEVICE_INFO) || '{}');
-    return {
-      ...device,
-      lastUpdated: new Date(device.lastUpdated)
-    };
+    // Return error state if no connection
+    throw new Error('MikroTik router not connected. Please configure connection in Settings.');
   },
 
   parseUptimeToSeconds(uptime: string): number {
@@ -408,50 +403,91 @@ export const api = {
 
   async getNetworkInterfaces(): Promise<NetworkInterface[]> {
     try {
-      // Try to get real data from MikroTik if connected
-      const mikrotikStatus = mikrotikAPI.getConnectionStatus();
-      if (mikrotikStatus.isConnected) {
-        const interfaces = await mikrotikAPI.getInterfaces();
-        return interfaces.map((iface: any, index: number) => ({
-          id: (index + 1).toString(),
+      // Get real data from MikroTik if connected
+      if (mikrotikManager.isConnected()) {
+        const interfaces = await mikrotikManager.getInterfaces();
+        return interfaces.map((iface: any) => ({
+          id: iface['.id'] || iface.name,
           name: iface.name,
-          type: iface.type === 'ether' ? 'ethernet' : 
-                iface.type === 'wlan' ? 'wireless' : 'bridge',
-          status: iface.running && !iface.disabled ? 'up' : 'down',
-          rxBytes: iface.rxByte || 0,
-          txBytes: iface.txByte || 0,
-          rxPackets: iface.rxPacket || 0,
-          txPackets: iface.txPacket || 0,
-          speed: iface.type === 'ether' ? '1Gbps' : 
-                 iface.type === 'wlan' ? '300Mbps' : '1Gbps',
+          type: this.mapInterfaceType(iface.type),
+          status: (iface.running === 'true' && iface.disabled !== 'true') ? 'up' : 'down',
+          rxBytes: parseInt(iface['rx-byte']) || 0,
+          txBytes: parseInt(iface['tx-byte']) || 0,
+          rxPackets: parseInt(iface['rx-packet']) || 0,
+          txPackets: parseInt(iface['tx-packet']) || 0,
+          speed: this.getInterfaceSpeed(iface),
           lastUpdated: new Date()
         }));
       }
     } catch (error) {
-      console.warn('Failed to get MikroTik interfaces, using mock data:', error);
+      console.error('Failed to get MikroTik interfaces:', error);
     }
     
-    // Fallback to mock data
-    const interfaces = JSON.parse(localStorage.getItem(STORAGE_KEYS.INTERFACES) || '[]');
-    return interfaces.map((iface: any) => ({
-      ...iface,
-      lastUpdated: new Date(iface.lastUpdated)
-    }));
+    // Return error state if no connection
+    throw new Error('MikroTik router not connected. Please configure connection in Settings.');
+  },
+
+  mapInterfaceType(type: string): 'ethernet' | 'wireless' | 'bridge' {
+    if (type === 'ether') return 'ethernet';
+    if (type === 'wlan') return 'wireless';
+    if (type === 'bridge') return 'bridge';
+    return 'ethernet'; // default
+  },
+
+  getInterfaceSpeed(iface: any): string {
+    if (iface.type === 'ether') {
+      const speed = iface['link-speed'];
+      if (speed) return speed;
+      return '1Gbps'; // default for ethernet
+    }
+    if (iface.type === 'wlan') {
+      return iface.rate || '300Mbps'; // default for wireless
+    }
+    return 'N/A';
+  },
+  // Real MikroTik user management
+  async getActiveHotspotUsers(): Promise<User[]> {
+    try {
+      if (mikrotikManager.isConnected()) {
+        const activeUsers = await mikrotikManager.getHotspotActive();
+        return activeUsers.map((user: any) => ({
+          id: user['.id'] || user.user,
+          fullName: user.user || 'Unknown',
+          phoneNumber: user.user || 'N/A', // MikroTik doesn't store phone by default
+          gender: 'other' as const,
+          macAddress: user['mac-address'] || 'Unknown',
+          deviceType: 'Unknown',
+          connectionTime: new Date(Date.now() - (parseInt(user.uptime) * 1000) || 0),
+          sessionDuration: parseInt(user.uptime) * 1000 || 0,
+          dataUsage: (parseInt(user['bytes-in']) || 0) + (parseInt(user['bytes-out']) || 0),
+          ipAddress: user.address || 'Unknown',
+          status: 'active' as const
+        }));
+      }
+    } catch (error) {
+      console.error('Failed to get active hotspot users:', error);
+    }
+    
+    throw new Error('MikroTik router not connected. Please configure connection in Settings.');
+  },
+
+  async disconnectHotspotUser(userId: string): Promise<void> {
+    try {
+      if (mikrotikManager.isConnected()) {
+        await mikrotikManager.disconnectActiveUser(userId);
+      } else {
+        throw new Error('MikroTik router not connected');
+      }
+    } catch (error) {
+      console.error('Failed to disconnect user:', error);
+      throw error;
+    }
   },
 
   async getTrafficLogs(interfaceId?: string, hours: number = 24): Promise<TrafficLog[]> {
-    const logs = JSON.parse(localStorage.getItem(STORAGE_KEYS.TRAFFIC_LOGS) || '[]');
-    const cutoffTime = new Date(Date.now() - hours * 60 * 60 * 1000);
-    
-    return logs
-      .filter((log: any) => {
-        const logTime = new Date(log.timestamp);
-        return logTime >= cutoffTime && (!interfaceId || log.interfaceId === interfaceId);
-      })
-      .map((log: any) => ({
-        ...log,
-        timestamp: new Date(log.timestamp)
-      }));
+    // For now, return empty array as traffic logging requires additional setup
+    // In production, this would query RouterOS logs or implement custom logging
+    return [];
   },
 
   async getAlerts(): Promise<Alert[]> {
