@@ -570,15 +570,20 @@ const Settings: React.FC = () => {
             <div>
               <h4 className="font-medium text-blue-800 mb-1">Setup Instructions</h4>
               <div className="text-blue-700 text-sm space-y-1">
-                <p><strong>🚀 Backend Proxy Connection:</strong></p>
-                <p>This system uses a secure backend proxy to connect to your MikroTik router.</p>
-                <p><strong>Setup your MikroTik router:</strong></p>
+                <p><strong>📋 MikroTik Router Setup:</strong></p>
                 <div className="bg-blue-100 p-2 rounded mt-2 font-mono text-xs">
                   <p>1. /ip service enable api</p>
                   <p>2. /ip service set api port=8728</p>
-                  <p>3. /user add name=api-user password=your-password group=full</p>
+                  <p>3. /user add name=apiuser password=yourpass group=full</p>
+                  <p>4. /ip firewall filter add action=accept dst-port=8728</p>
                 </div>
-                <p className="mt-2"><strong>✅ No SSL certificates needed!</strong> The backend handles secure connections.</p>
+                <p className="mt-2"><strong>🔧 Troubleshooting:</strong></p>
+                <ul className="list-disc list-inside text-xs space-y-1">
+                  <li>Ensure router IP is reachable (try ping)</li>
+                  <li>Check if API port 8728 is open</li>
+                  <li>Verify username/password are correct</li>
+                  <li>Make sure API service is running</li>
+                </ul>
               </div>
             </div>
           </div>
