@@ -15,8 +15,6 @@ const App: React.FC = () => {
   const { isAuthenticated, loading } = useAuth();
   const [currentPage, setCurrentPage] = useState('overview');
 
-  console.log('App render - isAuthenticated:', isAuthenticated, 'loading:', loading);
-
   if (loading) {
     return (
       <div className="min-h-screen bg-gray-100 flex items-center justify-center">
@@ -24,8 +22,6 @@ const App: React.FC = () => {
       </div>
     );
   }
-
-  console.log('App routing - isAuthenticated:', isAuthenticated);
 
   return (
     <Router>
@@ -36,8 +32,6 @@ const App: React.FC = () => {
         {/* Admin routes */}
         <Route path="/admin/*" element={
           isAuthenticated ? (
-            <>
-              {console.log('Rendering dashboard for authenticated user')}
             <DashboardLayout currentPage={currentPage} onNavigate={setCurrentPage}>
               {currentPage === 'overview' && <Overview />}
               {currentPage === 'users' && <UserSessions />}
@@ -46,12 +40,8 @@ const App: React.FC = () => {
               {currentPage === 'user-management' && <UserManagement />}
               {currentPage === 'settings' && <Settings />}
             </DashboardLayout>
-            </>
           ) : (
-            <>
-              {console.log('Rendering login for unauthenticated user')}
             <AdminLogin />
-            </>
           )
         } />
         

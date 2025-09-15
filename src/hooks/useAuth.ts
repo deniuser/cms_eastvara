@@ -23,12 +23,9 @@ export const useAuth = () => {
 
   const login = async (username: string, password: string): Promise<boolean> => {
     try {
-      console.log('Attempting login with:', username);
       const admin = await api.loginAdmin(username, password);
-      console.log('Login result:', admin);
       if (admin) {
         setCurrentAdmin(admin);
-        console.log('Current admin set:', admin);
         return true;
       }
       return false;

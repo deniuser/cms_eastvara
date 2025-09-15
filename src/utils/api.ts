@@ -144,13 +144,45 @@ const initializeData = () => {
 // Initialize data on module load
 initializeData();
 
-// Force re-initialize to ensure data exists
-console.log('Initializing default admin users...');
-const currentAdminUsers = localStorage.getItem(STORAGE_KEYS.ADMIN_USERS);
-console.log('Current admin users in storage:', currentAdminUsers);
+// Ensure admin users exist
+const ensureAdminUsers = () => {
+  const currentAdminUsers = localStorage.getItem(STORAGE_KEYS.ADMIN_USERS);
+  if (!currentAdminUsers || JSON.parse(currentAdminUsers).length === 0) {
+    const defaultAdminUsers: AdminUser[] = [
+      {
+        id: '1',
+        username: 'admin',
+        email: 'admin@mall.com',
+        role: 'super_admin',
+        createdAt: new Date(),
+        isActive: true
+      },
+      {
+        id: '2',
+        username: 'marcom',
+        email: 'marcom@mall.com',
+        role: 'marcom',
+        createdAt: new Date(),
+        isActive: true
+      },
+      {
+        id: '3',
+        username: 'technician',
+        email: 'tech@mall.com',
+        role: 'technician',
+        createdAt: new Date(),
+        isActive: true
+      }
+    ];
+    localStorage.setItem(STORAGE_KEYS.ADMIN_USERS, JSON.stringify(defaultAdminUsers));
+  }
+};
 
-if (!currentAdminUsers) {
-  console.log('No admin users found, creating defaults...');
+// Call this function to ensure admin users exist
+ensureAdminUsers();
+
+// Also ensure admin users exist when the page loads
+if (typeof window !== 'undefined') {
   const defaultAdminUsers: AdminUser[] = [
     {
       id: '1',
@@ -178,7 +210,6 @@ if (!currentAdminUsers) {
     }
   ];
   localStorage.setItem(STORAGE_KEYS.ADMIN_USERS, JSON.stringify(defaultAdminUsers));
-  console.log('Default admin users created');
 }
 
 // API Functions
@@ -219,23 +250,35 @@ export const api = {
 
   // Admin user management
   async loginAdmin(username: string, password: string): Promise<AdminUser | null> {
+    // Ensure admin users exist before attempting login
+    ensureAdminUsers();
+    
     const adminUsers = JSON.parse(localStorage.getItem(STORAGE_KEYS.ADMIN_USERS) || '[]');
-    console.log('Available admin users:', adminUsers);
-    console.log('Attempting login with username:', username);
     
-    // For demo purposes, accept any password for existing users
+    // For demo purposes, accept specific passwords for existing users
+    const validCredentials = [
+      { username: 'admin', password: 'admin' },
+      { username: 'marcom', password: 'marcom' },
+      { username: 'technician', password: 'technician' }
+    ];
+    
+    const isValidCredential = validCredentials.some(cred => 
+      cred.username === username && cred.password === password
+    );
+    
+    if (!isValidCredential) {
+      return null;
+    }
+    
     const admin = adminUsers.find((u: AdminUser) => u.username === username && u.isActive);
-    console.log('Found admin user:', admin);
     
-    if (admin && password) {
+    if (admin) {
       admin.lastLogin = new Date();
       const updatedUsers = adminUsers.map((u: AdminUser) => u.id === admin.id ? admin : u);
       localStorage.setItem(STORAGE_KEYS.ADMIN_USERS, JSON.stringify(updatedUsers));
       localStorage.setItem(STORAGE_KEYS.CURRENT_ADMIN, JSON.stringify(admin));
-      console.log('Login successful, admin stored:', admin);
       return admin;
     }
-    console.log('Login failed - no matching user or empty password');
     return null;
   },
 

@@ -13,7 +13,6 @@ const AdminLogin: React.FC = () => {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    console.log('Form submitted with:', formData);
     setIsLoading(true);
     setError('');
 
@@ -25,11 +24,9 @@ const AdminLogin: React.FC = () => {
     }
 
     try {
-      console.log('Calling login API...');
       const success = await login(formData.username, formData.password);
-      console.log('Login result:', success);
       if (!success) {
-        setError('Invalid username or password. Try: admin/admin, marcom/marcom, or technician/technician');
+        setError('Invalid username or password');
       }
     } catch (error) {
       console.error('Login error:', error);
