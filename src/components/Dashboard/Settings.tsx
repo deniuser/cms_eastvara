@@ -49,8 +49,7 @@ const Settings: React.FC = () => {
     mikrotikHost: '',
     mikrotikUsername: '',
     mikrotikPassword: '',
-    mikrotikPort: 8728,
-    mikrotikUseHttps: true
+    mikrotikPort: 8728
   });
 
   // Load MikroTik config on component mount
@@ -125,8 +124,7 @@ const Settings: React.FC = () => {
         host: settings.mikrotikHost,
         username: settings.mikrotikUsername,
         password: settings.mikrotikPassword,
-        port: settings.mikrotikPort,
-        useHttps: settings.mikrotikUseHttps
+        port: settings.mikrotikPort
       };
       localStorage.setItem('mikrotik_config', JSON.stringify(mikrotikConfig));
     }
@@ -497,6 +495,19 @@ const Settings: React.FC = () => {
             />
             <p className="text-xs text-gray-500 mt-1">Default: 8728 (RouterOS API)</p>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Connection Status
+            </label>
+            <div className="flex items-center h-10 px-3 py-2 border border-gray-300 rounded-lg bg-gray-50">
+              <div className={`w-3 h-3 rounded-full mr-2 ${
+                mikrotikStatus?.connected ? 'bg-green-500' : 'bg-red-500'
+              }`}></div>
+              <span className="text-sm text-gray-700">
+                {mikrotikStatus?.connected ? 'Connected' : 'Disconnected'}
+              </span>
+            </div>
+          </div>
         </div>
         
         <div className="mt-4">
@@ -559,13 +570,15 @@ const Settings: React.FC = () => {
             <div>
               <h4 className="font-medium text-blue-800 mb-1">Setup Instructions</h4>
               <div className="text-blue-700 text-sm space-y-1">
-                <p><strong>🚀 Backend Proxy Solution:</strong></p>
-                <p>This system now uses a backend proxy server to connect to your MikroTik router securely!</p>
+                <p><strong>🚀 Backend Proxy Connection:</strong></p>
+                <p>This system uses a secure backend proxy to connect to your MikroTik router.</p>
                 <p><strong>Setup your MikroTik router:</strong></p>
-                <p>1. Enable API service: <code className="bg-blue-100 px-1 rounded">/ip service enable api</code></p>
-                <p>2. Create API user (optional): <code className="bg-blue-100 px-1 rounded">/user add name=api-user password=your-password group=full</code></p>
-                <p>3. Set API port (default 8728): <code className="bg-blue-100 px-1 rounded">/ip service set api port=8728</code></p>
-                <p><strong>✅ No SSL certificates needed!</strong> The backend proxy handles the secure connection.</p>
+                <div className="bg-blue-100 p-2 rounded mt-2 font-mono text-xs">
+                  <p>1. /ip service enable api</p>
+                  <p>2. /ip service set api port=8728</p>
+                  <p>3. /user add name=api-user password=your-password group=full</p>
+                </div>
+                <p className="mt-2"><strong>✅ No SSL certificates needed!</strong> The backend handles secure connections.</p>
               </div>
             </div>
           </div>
