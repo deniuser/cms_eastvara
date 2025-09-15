@@ -18,21 +18,25 @@ export class RouterOSAPI {
   private username: string = '';
   private password: string = '';
   private port: number = 8728;
+  private useSecure: boolean = false;
   private callbacks: Map<string, (response: RouterOSResponse) => void> = new Map();
   private tagCounter = 0;
 
   constructor() {}
 
-  async connect(host: string, username: string, password: string, port: number = 8728): Promise<boolean> {
+  async connect(host: string, username: string, password: string, port: number = 8728, useSecure: boolean = false): Promise<boolean> {
     this.host = host;
     this.username = username;
     this.password = password;
     this.port = port;
+    this.useSecure = useSecure;
 
     try {
       // For browser environment, we need to use WebSocket connection to RouterOS
       // Note: This requires RouterOS to have WebSocket API enabled
-      const wsUrl = `ws://${host}:${port + 1}`; // WebSocket API typically runs on port 8729
+      const protocol = useSecure ? 'wss' : 'ws';
+      const wsPort = useSecure ? (port === 8728 ? 8729 : port) : (port === 8728 ? 8729 : port);
+      const wsUrl = `${protocol}://${host}:${wsPort}`;
       
       this.ws = new WebSocket(wsUrl);
       
@@ -350,12 +354,42 @@ export class MikroTikAPIManager {
   async connect(host: string, username: string, password: string, port?: number, useHttps: boolean = false): Promise<{ success: boolean; method?: string; error?: string; systemInfo?: any }> {
     this.config = { host, username, password, port: port || 8728, useHttps };
 
-    let wsError: string = '';
-    let httpError: string = '';
+    let wsError = '';
+    let httpError = '';
+    let httpsError = '';
 
-    // Try WebSocket API first (more reliable for real-time data)
+    // If we're on HTTPS, try HTTPS connections first
+    if (window.location.protocol === 'https:') {
+      // Try HTTPS WebSocket API first
+      try {
+        const wsConnected = await this.wsApi.connect(host, username, password, port || 8729, true);
+        if (wsConnected) {
+          this.currentApi = 'ws';
+          const systemInfo = await this.wsApi.getSystemResource();
+          return { success: true, method: 'Secure WebSocket API (WSS)', systemInfo };
+        }
+      } catch (error) {
+        wsError = error instanceof Error ? error.message : String(error);
+        console.warn('Secure WebSocket API connection failed:', wsError);
+      }
+
+      // Try HTTPS REST API
+      try {
+        const httpConnected = await this.httpApi.connect(host, username, password, port || 443, true);
+        if (httpConnected) {
+          this.currentApi = 'http';
+          const systemInfo = await this.httpApi.getSystemResource();
+          return { success: true, method: 'HTTPS REST API', systemInfo };
+        }
+      } catch (error) {
+        httpsError = error instanceof Error ? error.message : String(error);
+        console.warn('HTTPS API connection failed:', httpsError);
+      }
+    }
+
+    // Try regular WebSocket API (for HTTP sites or as fallback)
     try {
-      const wsConnected = await this.wsApi.connect(host, username, password, port || 8728);
+      const wsConnected = await this.wsApi.connect(host, username, password, port || 8728, false);
       if (wsConnected) {
         this.currentApi = 'ws';
         const systemInfo = await this.wsApi.getSystemResource();
@@ -368,7 +402,7 @@ export class MikroTikAPIManager {
 
     // Try HTTP REST API as fallback
     try {
-      const httpConnected = await this.httpApi.connect(host, username, password, port || 80, useHttps);
+      const httpConnected = await this.httpApi.connect(host, username, password, port || 80, false);
       if (httpConnected) {
         this.currentApi = 'http';
         const systemInfo = await this.httpApi.getSystemResource();
@@ -381,7 +415,9 @@ export class MikroTikAPIManager {
 
     return { 
       success: false, 
-      error: `Both WebSocket and HTTP API connections failed. WebSocket: ${wsError}. HTTP: ${httpError}` 
+      error: window.location.protocol === 'https:' 
+        ? `All secure connection attempts failed. This is likely because your MikroTik router doesn't have SSL/TLS certificates configured. Secure WebSocket: ${wsError}. HTTPS: ${httpsError}. Regular WebSocket: ${wsError}. HTTP: ${httpError}`
+        : `Both WebSocket and HTTP API connections failed. WebSocket: ${wsError}. HTTP: ${httpError}`
     };
   }
 

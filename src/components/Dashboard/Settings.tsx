@@ -49,7 +49,8 @@ const Settings: React.FC = () => {
     mikrotikHost: '',
     mikrotikUsername: '',
     mikrotikPassword: '',
-    mikrotikPort: 8728
+    mikrotikPort: 8728,
+    mikrotikUseHttps: true
   });
 
   // Load MikroTik config on component mount
@@ -125,7 +126,7 @@ const Settings: React.FC = () => {
         username: settings.mikrotikUsername,
         password: settings.mikrotikPassword,
         port: settings.mikrotikPort,
-        useHttps: false
+        useHttps: settings.mikrotikUseHttps
       };
       localStorage.setItem('mikrotik_config', JSON.stringify(mikrotikConfig));
     }
@@ -155,7 +156,7 @@ const Settings: React.FC = () => {
         settings.mikrotikUsername,
         settings.mikrotikPassword,
         settings.mikrotikPort,
-        false // useHttps - can be made configurable
+        settings.mikrotikUseHttps
       );
       
       if (result.success) {
@@ -497,6 +498,20 @@ const Settings: React.FC = () => {
             />
             <p className="text-xs text-gray-500 mt-1">Default: 8728 (API), 80 (HTTP), 443 (HTTPS)</p>
           </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Connection Type
+            </label>
+            <select
+              value={settings.mikrotikUseHttps ? 'https' : 'http'}
+              onChange={(e) => handleChange('mikrotikUseHttps', e.target.value === 'https')}
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="http">HTTP (Insecure - for testing)</option>
+              <option value="https">HTTPS (Secure - recommended)</option>
+            </select>
+            <p className="text-xs text-gray-500 mt-1">HTTPS required for secure sites</p>
+          </div>
         </div>
         
         <div className="mt-4">
@@ -559,13 +574,15 @@ const Settings: React.FC = () => {
             <div>
               <h4 className="font-medium text-blue-800 mb-1">Setup Instructions</h4>
               <div className="text-blue-700 text-sm space-y-1">
-                <p><strong>Option 1: WebSocket API (Recommended)</strong></p>
-                <p>1. Enable WebSocket service: <code className="bg-blue-100 px-1 rounded">/ip service enable www</code></p>
-                <p>2. Enable API: <code className="bg-blue-100 px-1 rounded">/ip service enable api</code></p>
-                <p><strong>Option 2: HTTP REST API</strong></p>
-                <p>1. Enable REST API: <code className="bg-blue-100 px-1 rounded">/ip service enable www</code></p>
-                <p>2. Create API user with full permissions</p>
-                <p>3. Ensure router is accessible from this network</p>
+                <p><strong>🔒 HTTPS Site Requirements:</strong></p>
+                <p>Since this site uses HTTPS, your MikroTik router needs SSL/TLS certificates for secure connections.</p>
+                <p><strong>Quick Setup (for testing):</strong></p>
+                <p>1. Enable services: <code className="bg-blue-100 px-1 rounded">/ip service enable api,www</code></p>
+                <p>2. For secure connection, generate certificates:</p>
+                <p><code className="bg-blue-100 px-1 rounded">/certificate add name=https-cert common-name={settings.mikrotikHost}</code></p>
+                <p><code className="bg-blue-100 px-1 rounded">/certificate sign https-cert</code></p>
+                <p>3. Enable HTTPS: <code className="bg-blue-100 px-1 rounded">/ip service set www-ssl certificate=https-cert disabled=no</code></p>
+                <p><strong>⚠️ Alternative:</strong> Use a backend proxy server to bridge HTTPS ↔ HTTP connections</p>
               </div>
             </div>
           </div>
