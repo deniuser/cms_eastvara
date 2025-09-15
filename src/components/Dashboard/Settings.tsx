@@ -98,13 +98,13 @@ const Settings: React.FC = () => {
       } else {
         setMikrotikStatus({
           connected: false,
-          error: result.error
+          error: result.error || 'Connection failed'
         });
       }
     } catch (error) {
       setMikrotikStatus({
         connected: false,
-        error: error instanceof Error ? error.message : 'Connection failed'
+        error: error instanceof Error ? error.message : 'Unexpected connection error'
       });
     } finally {
       setMikrotikTesting(false);

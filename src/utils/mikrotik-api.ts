@@ -350,6 +350,9 @@ export class MikroTikAPIManager {
   async connect(host: string, username: string, password: string, port?: number, useHttps: boolean = false): Promise<{ success: boolean; method?: string; error?: string; systemInfo?: any }> {
     this.config = { host, username, password, port: port || 8728, useHttps };
 
+    let wsError: any = null;
+    let httpError: any = null;
+
     // Try WebSocket API first (more reliable for real-time data)
     try {
       const wsConnected = await this.wsApi.connect(host, username, password, port || 8728);
@@ -359,6 +362,7 @@ export class MikroTikAPIManager {
         return { success: true, method: 'WebSocket API', systemInfo };
       }
     } catch (wsError) {
+      wsError = error;
       console.warn('WebSocket API connection failed:', wsError);
     }
 
@@ -371,11 +375,14 @@ export class MikroTikAPIManager {
         return { success: true, method: 'HTTP REST API', systemInfo };
       }
     } catch (httpError) {
+      httpError = error;
       console.warn('HTTP API connection failed:', httpError);
-      return { success: false, error: `Both WebSocket and HTTP API connections failed. WebSocket: ${wsError}. HTTP: ${httpError}` };
     }
 
-    return { success: false, error: 'No API method available' };
+    return { 
+      success: false, 
+      error: `Both WebSocket and HTTP API connections failed. WebSocket: ${wsError?.message || wsError}. HTTP: ${httpError?.message || httpError}` 
+    };
   }
 
   private getActiveApi() {
