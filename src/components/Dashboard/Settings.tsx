@@ -155,8 +155,7 @@ const Settings: React.FC = () => {
         settings.mikrotikHost,
         settings.mikrotikUsername,
         settings.mikrotikPassword,
-        settings.mikrotikPort,
-        settings.mikrotikUseHttps
+        settings.mikrotikPort
       );
       
       if (result.success) {
@@ -496,21 +495,7 @@ const Settings: React.FC = () => {
               placeholder="8728"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
-            <p className="text-xs text-gray-500 mt-1">Default: 8728 (API), 80 (HTTP), 443 (HTTPS)</p>
-          </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
-              Connection Type
-            </label>
-            <select
-              value={settings.mikrotikUseHttps ? 'https' : 'http'}
-              onChange={(e) => handleChange('mikrotikUseHttps', e.target.value === 'https')}
-              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
-            >
-              <option value="http">HTTP (Insecure - for testing)</option>
-              <option value="https">HTTPS (Secure - recommended)</option>
-            </select>
-            <p className="text-xs text-gray-500 mt-1">HTTPS required for secure sites</p>
+            <p className="text-xs text-gray-500 mt-1">Default: 8728 (RouterOS API)</p>
           </div>
         </div>
         
@@ -574,15 +559,13 @@ const Settings: React.FC = () => {
             <div>
               <h4 className="font-medium text-blue-800 mb-1">Setup Instructions</h4>
               <div className="text-blue-700 text-sm space-y-1">
-                <p><strong>🔒 HTTPS Site Requirements:</strong></p>
-                <p>Since this site uses HTTPS, your MikroTik router needs SSL/TLS certificates for secure connections.</p>
-                <p><strong>Quick Setup (for testing):</strong></p>
-                <p>1. Enable services: <code className="bg-blue-100 px-1 rounded">/ip service enable api,www</code></p>
-                <p>2. For secure connection, generate certificates:</p>
-                <p><code className="bg-blue-100 px-1 rounded">/certificate add name=https-cert common-name={settings.mikrotikHost}</code></p>
-                <p><code className="bg-blue-100 px-1 rounded">/certificate sign https-cert</code></p>
-                <p>3. Enable HTTPS: <code className="bg-blue-100 px-1 rounded">/ip service set www-ssl certificate=https-cert disabled=no</code></p>
-                <p><strong>⚠️ Alternative:</strong> Use a backend proxy server to bridge HTTPS ↔ HTTP connections</p>
+                <p><strong>🚀 Backend Proxy Solution:</strong></p>
+                <p>This system now uses a backend proxy server to connect to your MikroTik router securely!</p>
+                <p><strong>Setup your MikroTik router:</strong></p>
+                <p>1. Enable API service: <code className="bg-blue-100 px-1 rounded">/ip service enable api</code></p>
+                <p>2. Create API user (optional): <code className="bg-blue-100 px-1 rounded">/user add name=api-user password=your-password group=full</code></p>
+                <p>3. Set API port (default 8728): <code className="bg-blue-100 px-1 rounded">/ip service set api port=8728</code></p>
+                <p><strong>✅ No SSL certificates needed!</strong> The backend proxy handles the secure connection.</p>
               </div>
             </div>
           </div>

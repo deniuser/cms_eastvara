@@ -333,143 +333,110 @@ export class RouterOSHTTPAPI {
   }
 }
 
-// Main MikroTik API Manager
+// Backend Proxy API Manager
 export class MikroTikAPIManager {
-  private wsApi: RouterOSAPI;
-  private httpApi: RouterOSHTTPAPI;
-  private currentApi: 'ws' | 'http' | null = null;
+  private connected = false;
   private config: {
     host: string;
     username: string;
     password: string;
     port: number;
-    useHttps: boolean;
   } | null = null;
+  private baseUrl = window.location.origin;
 
   constructor() {
-    this.wsApi = new RouterOSAPI();
-    this.httpApi = new RouterOSHTTPAPI();
   }
 
-  async connect(host: string, username: string, password: string, port?: number, useHttps: boolean = false): Promise<{ success: boolean; method?: string; error?: string; systemInfo?: any }> {
-    this.config = { host, username, password, port: port || 8728, useHttps };
-
-    let wsError = '';
-    let httpError = '';
-    let httpsError = '';
-
-    // If we're on HTTPS, try HTTPS connections first
-    if (window.location.protocol === 'https:') {
-      // Try HTTPS WebSocket API first
-      try {
-        const wsConnected = await this.wsApi.connect(host, username, password, port || 8729, true);
-        if (wsConnected) {
-          this.currentApi = 'ws';
-          const systemInfo = await this.wsApi.getSystemResource();
-          return { success: true, method: 'Secure WebSocket API (WSS)', systemInfo };
-        }
-      } catch (error) {
-        wsError = error instanceof Error ? error.message : String(error);
-        console.warn('Secure WebSocket API connection failed:', wsError);
-      }
-
-      // Try HTTPS REST API
-      try {
-        const httpConnected = await this.httpApi.connect(host, username, password, port || 443, true);
-        if (httpConnected) {
-          this.currentApi = 'http';
-          const systemInfo = await this.httpApi.getSystemResource();
-          return { success: true, method: 'HTTPS REST API', systemInfo };
-        }
-      } catch (error) {
-        httpsError = error instanceof Error ? error.message : String(error);
-        console.warn('HTTPS API connection failed:', httpsError);
-      }
-    }
-
-    // Try regular WebSocket API (for HTTP sites or as fallback)
+  async connect(host: string, username: string, password: string, port?: number): Promise<{ success: boolean; method?: string; error?: string; systemInfo?: any }> {
+    this.config = { host, username, password, port: port || 8728 };
+    
     try {
-      const wsConnected = await this.wsApi.connect(host, username, password, port || 8728, false);
-      if (wsConnected) {
-        this.currentApi = 'ws';
-        const systemInfo = await this.wsApi.getSystemResource();
-        return { success: true, method: 'WebSocket API', systemInfo };
+      const response = await fetch(`${this.baseUrl}/api/mikrotik/connect`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          host,
+          username,
+          password,
+          port: port || 8728
+        })
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        this.connected = true;
+        return result;
+      } else {
+        return { success: false, error: result.error };
       }
     } catch (error) {
-      wsError = error instanceof Error ? error.message : String(error);
-      console.warn('WebSocket API connection failed:', wsError);
+      return { 
+        success: false, 
+        error: `Backend connection failed: ${error instanceof Error ? error.message : String(error)}`
+      };
     }
-
-    // Try HTTP REST API as fallback
-    try {
-      const httpConnected = await this.httpApi.connect(host, username, password, port || 80, false);
-      if (httpConnected) {
-        this.currentApi = 'http';
-        const systemInfo = await this.httpApi.getSystemResource();
-        return { success: true, method: 'HTTP REST API', systemInfo };
-      }
-    } catch (error) {
-      httpError = error instanceof Error ? error.message : String(error);
-      console.warn('HTTP API connection failed:', httpError);
-    }
-
-    return { 
-      success: false, 
-      error: window.location.protocol === 'https:' 
-        ? `All secure connection attempts failed. This is likely because your MikroTik router doesn't have SSL/TLS certificates configured. Secure WebSocket: ${wsError}. HTTPS: ${httpsError}. Regular WebSocket: ${wsError}. HTTP: ${httpError}`
-        : `Both WebSocket and HTTP API connections failed. WebSocket: ${wsError}. HTTP: ${httpError}`
-    };
   }
 
-  private getActiveApi() {
-    if (this.currentApi === 'ws') return this.wsApi;
-    if (this.currentApi === 'http') return this.httpApi;
-    throw new Error('No active API connection');
+  private async makeRequest(endpoint: string, data?: any): Promise<any> {
+    if (!this.config) {
+      throw new Error('Not connected. Please connect first.');
+    }
+    
+    const response = await fetch(`${this.baseUrl}/api/mikrotik/${endpoint}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        host: this.config.host,
+        port: this.config.port,
+        ...data
+      })
+    });
+    
+    if (!response.ok) {
+      const error = await response.json();
+      throw new Error(error.error || 'Request failed');
+    }
+    
+    return response.json();
   }
 
   async getSystemResource(): Promise<any> {
-    return this.getActiveApi().getSystemResource();
+    return this.makeRequest('system-resource');
   }
 
   async getInterfaces(): Promise<any[]> {
-    return this.getActiveApi().getInterfaces();
+    return this.makeRequest('interfaces');
   }
 
   async getHotspotActive(): Promise<any[]> {
-    return this.getActiveApi().getHotspotActive();
-  }
-
-  async getHotspotUsers(): Promise<any[]> {
-    return this.getActiveApi().getHotspotUsers();
-  }
-
-  async addHotspotUser(username: string, password: string, profile?: string): Promise<boolean> {
-    return this.getActiveApi().addHotspotUser(username, password, profile);
-  }
-
-  async removeHotspotUser(id: string): Promise<boolean> {
-    return this.getActiveApi().removeHotspotUser(id);
+    return this.makeRequest('hotspot-active');
   }
 
   async disconnectActiveUser(id: string): Promise<boolean> {
-    return this.getActiveApi().disconnectActiveUser(id);
+    try {
+      await this.makeRequest('disconnect-user', { userId: id });
+      return true;
+    } catch (error) {
+      return false;
+    }
   }
 
   isConnected(): boolean {
-    if (this.currentApi === 'ws') return this.wsApi.isConnected();
-    if (this.currentApi === 'http') return true; // HTTP is stateless
-    return false;
+    return this.connected;
   }
 
   disconnect() {
-    if (this.currentApi === 'ws') {
-      this.wsApi.disconnect();
-    }
-    this.currentApi = null;
+    this.connected = false;
+    this.config = null;
   }
 
   getCurrentMethod(): string | null {
-    return this.currentApi;
+    return this.connected ? 'Backend Proxy API' : null;
   }
 
   saveConfig() {
