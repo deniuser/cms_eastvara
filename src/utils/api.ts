@@ -1,4 +1,5 @@
 import { User, AdminUser, PortalDesign, DeviceInfo, NetworkInterface, TrafficLog, Alert } from '../types';
+import { mikrotikAPI } from './mikrotik';
 
 // Mock data storage using localStorage
 const STORAGE_KEYS = {
@@ -359,6 +360,29 @@ export const api = {
 
   // Device management
   async getDeviceInfo(): Promise<DeviceInfo> {
+    try {
+      // Try to get real data from MikroTik if connected
+      const mikrotikStatus = mikrotikAPI.getConnectionStatus();
+      if (mikrotikStatus.isConnected) {
+        const systemResources = await mikrotikAPI.getSystemResources();
+        return {
+          id: '1',
+          name: mikrotikStatus.systemInfo?.identity || 'MikroTik Router',
+          model: systemResources.boardName || 'Unknown',
+          routerOSVersion: systemResources.version || 'Unknown',
+          uptime: systemResources.uptime ? this.parseUptimeToSeconds(systemResources.uptime) : 0,
+          cpuUsage: systemResources.cpuLoad || 0,
+          memoryUsage: systemResources.totalMemory ? 
+            Math.round(((systemResources.totalMemory - systemResources.freeMemory) / systemResources.totalMemory) * 100) : 0,
+          lastUpdated: new Date(),
+          status: 'online' as const
+        };
+      }
+    } catch (error) {
+      console.warn('Failed to get MikroTik data, using mock data:', error);
+    }
+    
+    // Fallback to mock data
     const device = JSON.parse(localStorage.getItem(STORAGE_KEYS.DEVICE_INFO) || '{}');
     return {
       ...device,
@@ -366,7 +390,48 @@ export const api = {
     };
   },
 
+  parseUptimeToSeconds(uptime: string): number {
+    // Convert uptime string like "10d 5h 30m" to seconds
+    const parts = uptime.match(/(\d+)d|(\d+)h|(\d+)m|(\d+)s/g) || [];
+    let seconds = 0;
+    
+    parts.forEach(part => {
+      const value = parseInt(part);
+      if (part.includes('d')) seconds += value * 24 * 60 * 60;
+      else if (part.includes('h')) seconds += value * 60 * 60;
+      else if (part.includes('m')) seconds += value * 60;
+      else if (part.includes('s')) seconds += value;
+    });
+    
+    return seconds;
+  },
+
   async getNetworkInterfaces(): Promise<NetworkInterface[]> {
+    try {
+      // Try to get real data from MikroTik if connected
+      const mikrotikStatus = mikrotikAPI.getConnectionStatus();
+      if (mikrotikStatus.isConnected) {
+        const interfaces = await mikrotikAPI.getInterfaces();
+        return interfaces.map((iface: any, index: number) => ({
+          id: (index + 1).toString(),
+          name: iface.name,
+          type: iface.type === 'ether' ? 'ethernet' : 
+                iface.type === 'wlan' ? 'wireless' : 'bridge',
+          status: iface.running && !iface.disabled ? 'up' : 'down',
+          rxBytes: iface.rxByte || 0,
+          txBytes: iface.txByte || 0,
+          rxPackets: iface.rxPacket || 0,
+          txPackets: iface.txPacket || 0,
+          speed: iface.type === 'ether' ? '1Gbps' : 
+                 iface.type === 'wlan' ? '300Mbps' : '1Gbps',
+          lastUpdated: new Date()
+        }));
+      }
+    } catch (error) {
+      console.warn('Failed to get MikroTik interfaces, using mock data:', error);
+    }
+    
+    // Fallback to mock data
     const interfaces = JSON.parse(localStorage.getItem(STORAGE_KEYS.INTERFACES) || '[]');
     return interfaces.map((iface: any) => ({
       ...iface,

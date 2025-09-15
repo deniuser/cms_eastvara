@@ -6,11 +6,22 @@ import {
   Bell, 
   Database, 
   Save,
-  RefreshCw
+  RefreshCw,
+  CheckCircle,
+  XCircle,
+  AlertCircle
 } from 'lucide-react';
+import { mikrotikAPI, MikroTikConfig } from '../../utils/mikrotik';
 
 const Settings: React.FC = () => {
   const [saving, setSaving] = useState(false);
+  const [mikrotikTesting, setMikrotikTesting] = useState(false);
+  const [mikrotikStatus, setMikrotikStatus] = useState<{
+    connected: boolean;
+    error?: string;
+    systemInfo?: any;
+  } | null>(null);
+  
   const [settings, setSettings] = useState({
     // Network Settings
     networkName: 'Mall-WiFi',
@@ -31,13 +42,76 @@ const Settings: React.FC = () => {
     // System Settings
     backupInterval: 24, // hours
     logRetention: 30, // days
-    autoUpdate: false
+    autoUpdate: false,
+    
+    // MikroTik Settings
+    mikrotikHost: '',
+    mikrotikUsername: '',
+    mikrotikPassword: '',
+    mikrotikPort: 8728
   });
+
+  // Load MikroTik config on component mount
+  React.useEffect(() => {
+    const config = mikrotikAPI.loadConfig();
+    if (config) {
+      setSettings(prev => ({
+        ...prev,
+        mikrotikHost: config.host,
+        mikrotikUsername: config.username,
+        mikrotikPassword: config.password,
+        mikrotikPort: config.port || 8728
+      }));
+      
+      // Check current connection status
+      const status = mikrotikAPI.getConnectionStatus();
+      setMikrotikStatus({
+        connected: status.isConnected,
+        error: status.lastError,
+        systemInfo: status.systemInfo
+      });
+    }
+  }, []);
 
   const handleChange = (field: string, value: any) => {
     setSettings(prev => ({ ...prev, [field]: value }));
   };
 
+  const handleTestMikroTikConnection = async () => {
+    setMikrotikTesting(true);
+    setMikrotikStatus(null);
+    
+    const config: MikroTikConfig = {
+      host: settings.mikrotikHost,
+      username: settings.mikrotikUsername,
+      password: settings.mikrotikPassword,
+      port: settings.mikrotikPort
+    };
+    
+    try {
+      const result = await mikrotikAPI.testConnection(config);
+      
+      if (result.success) {
+        mikrotikAPI.setConfig(config);
+        setMikrotikStatus({
+          connected: true,
+          systemInfo: result.systemInfo
+        });
+      } else {
+        setMikrotikStatus({
+          connected: false,
+          error: result.error
+        });
+      }
+    } catch (error) {
+      setMikrotikStatus({
+        connected: false,
+        error: error instanceof Error ? error.message : 'Connection failed'
+      });
+    } finally {
+      setMikrotikTesting(false);
+    }
+  };
   const handleSave = async () => {
     setSaving(true);
     try {
@@ -45,8 +119,10 @@ const Settings: React.FC = () => {
       await new Promise(resolve => setTimeout(resolve, 1000));
       // In real implementation, this would save to backend
       console.log('Settings saved:', settings);
+      alert('Settings saved successfully!');
     } catch (error) {
       console.error('Error saving settings:', error);
+      alert('Error saving settings. Please try again.');
     } finally {
       setSaving(false);
     }
@@ -266,6 +342,38 @@ const Settings: React.FC = () => {
         <h3 className="text-lg font-semibold text-gray-800 mb-4">
           Mikrotik Router Integration
         </h3>
+        
+        {/* Connection Status */}
+        {mikrotikStatus && (
+          <div className={`mb-4 p-3 rounded-lg flex items-center ${
+            mikrotikStatus.connected 
+              ? 'bg-green-50 border border-green-200' 
+              : 'bg-red-50 border border-red-200'
+          }`}>
+            {mikrotikStatus.connected ? (
+              <>
+                <CheckCircle className="w-5 h-5 text-green-500 mr-2" />
+                <div>
+                  <p className="text-green-800 font-medium">Connected Successfully</p>
+                  {mikrotikStatus.systemInfo && (
+                    <p className="text-green-600 text-sm">
+                      {mikrotikStatus.systemInfo.identity} - RouterOS {mikrotikStatus.systemInfo.version}
+                    </p>
+                  )}
+                </div>
+              </>
+            ) : (
+              <>
+                <XCircle className="w-5 h-5 text-red-500 mr-2" />
+                <div>
+                  <p className="text-red-800 font-medium">Connection Failed</p>
+                  <p className="text-red-600 text-sm">{mikrotikStatus.error}</p>
+                </div>
+              </>
+            )}
+          </div>
+        )}
+        
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -273,6 +381,8 @@ const Settings: React.FC = () => {
             </label>
             <input
               type="text"
+              value={settings.mikrotikHost}
+              onChange={(e) => handleChange('mikrotikHost', e.target.value)}
               placeholder="192.168.1.1"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -283,6 +393,8 @@ const Settings: React.FC = () => {
             </label>
             <input
               type="text"
+              value={settings.mikrotikUsername}
+              onChange={(e) => handleChange('mikrotikUsername', e.target.value)}
               placeholder="admin"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
@@ -293,15 +405,97 @@ const Settings: React.FC = () => {
             </label>
             <input
               type="password"
+              value={settings.mikrotikPassword}
+              onChange={(e) => handleChange('mikrotikPassword', e.target.value)}
               placeholder="password"
               className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
             />
           </div>
         </div>
+        
+        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              API Port
+            </label>
+            <input
+              type="number"
+              value={settings.mikrotikPort}
+              onChange={(e) => handleChange('mikrotikPort', parseInt(e.target.value) || 8728)}
+              placeholder="8728"
+              className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+            />
+            <p className="text-xs text-gray-500 mt-1">Default: 8728 (API), 80 (HTTP), 443 (HTTPS)</p>
+          </div>
+        </div>
+        
         <div className="mt-4">
-          <button className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-            Test Connection
+          <button 
+            onClick={handleTestMikroTikConnection}
+            disabled={mikrotikTesting || !settings.mikrotikHost || !settings.mikrotikUsername}
+            className="px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center"
+          >
+            {mikrotikTesting ? (
+              <>
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                Testing Connection...
+              </>
+            ) : (
+              <>
+                <CheckCircle className="w-4 h-4 mr-2" />
+                Test Connection
+              </>
+            )}
           </button>
+        </div>
+        
+        {/* System Information */}
+        {mikrotikStatus?.connected && mikrotikStatus.systemInfo && (
+          <div className="mt-4 p-4 bg-gray-50 rounded-lg">
+            <h4 className="font-medium text-gray-800 mb-2">Router Information</h4>
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <span className="text-gray-600">Identity:</span>
+                <span className="ml-2 font-medium">{mikrotikStatus.systemInfo.identity}</span>
+              </div>
+              <div>
+                <span className="text-gray-600">Version:</span>
+                <span className="ml-2 font-medium">{mikrotikStatus.systemInfo.version}</span>
+              </div>
+              <div>
+                <span className="text-gray-600">Uptime:</span>
+                <span className="ml-2 font-medium">{mikrotikStatus.systemInfo.uptime}</span>
+              </div>
+              <div>
+                <span className="text-gray-600">CPU Load:</span>
+                <span className="ml-2 font-medium">{mikrotikStatus.systemInfo.cpuLoad}%</span>
+              </div>
+              <div>
+                <span className="text-gray-600">Free Memory:</span>
+                <span className="ml-2 font-medium">{mikrotikStatus.systemInfo.freeMemory} MB</span>
+              </div>
+              <div>
+                <span className="text-gray-600">Total Memory:</span>
+                <span className="ml-2 font-medium">{mikrotikStatus.systemInfo.totalMemory} MB</span>
+              </div>
+            </div>
+          </div>
+        )}
+        
+        {/* Setup Instructions */}
+        <div className="mt-4 p-4 bg-blue-50 border border-blue-200 rounded-lg">
+          <div className="flex items-start">
+            <AlertCircle className="w-5 h-5 text-blue-500 mr-2 mt-0.5" />
+            <div>
+              <h4 className="font-medium text-blue-800 mb-1">Setup Instructions</h4>
+              <div className="text-blue-700 text-sm space-y-1">
+                <p>1. Enable API service on your MikroTik router: <code className="bg-blue-100 px-1 rounded">/ip service enable api</code></p>
+                <p>2. Create an API user with appropriate permissions</p>
+                <p>3. Ensure the router is accessible from this network</p>
+                <p>4. Default API port is 8728 (unencrypted) or 8729 (SSL)</p>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
     </div>
